@@ -1,0 +1,50 @@
+name: Analyze User Story Coverage
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  zip-and-analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Zip repository (excluding .git and workflow files)
+        run: |
+          zip -r repo.zip . -x "*.git*" ".github/workflows/*"
+
+      - name: Upload zip as artifact (Optional for debugging)
+        uses: actions/upload-artifact@v3
+        with:
+          name: repo-zip
+          path: repo.zip
+
+      - name: Send ZIP to OpenAI for User Story Coverage Analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.openai.com/v1/chat/completions" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4-turbo",
+              "messages": [
+                {"role": "system", "content": "You are an expert in analyzing software repositories for user story coverage."},
+                {"role": "user", "content": "Here is a software repository ZIP. Extract the contents and analyze how well the codebase aligns with defined user stories. Provide a summary of coverage, gaps, and suggestions for improvement."}
+              ],
+              "max_tokens": 1000
+            }')
+
+          echo "ChatGPT Response: $RESPONSE"
+          echo "$RESPONSE" > response.json
+
+      - name: Save Response as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: chatgpt-response
+          path: response.json
